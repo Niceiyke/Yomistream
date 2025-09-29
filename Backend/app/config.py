@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
     MODEL_NAME: str = "deepseek-r1-distill-llama-70b"  # or any default model you prefer
-    WHISPER_MODEL: str = "medium"
+    WHISPER_MODEL: str = "tiny"
     # Supabase / Auth
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_SERVICE_ROLE_KEY: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
