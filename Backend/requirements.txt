@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-dotenv
+openai
+pydantic
+whisper-openai
+yt-dlp
+ffmpeg-python
+python-multipart
+aiofiles
+groq
+pydantic-settings
+supabase
+python-jose[cryptography]
+httpx
