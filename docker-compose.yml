@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    image: yomistream-backend:local
+    container_name: yomistream-backend
+    environment:
+      - PORT=8001
+      # Add other envs or mount a .env file
+    networks:
+      - webnet
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: yomistream-nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - webnet
+
+networks:
+  webnet:
+    driver: bridge
