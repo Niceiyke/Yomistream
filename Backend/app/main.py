@@ -35,9 +35,17 @@ app.include_router(favorites_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 
+# Lightweight root health endpoint (keeps backward compatibility)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+# API-scoped health endpoint so reverse proxies and compose healthchecks
+# can use the `/api` prefix the application routes are mounted under.
+@app.get("/api/health")
+async def api_health_check():
+    return {"status": "healthy", "api": True}
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,3 +1,6 @@
+
+version: "3.8"
+
 services:
   backend:
     build:
@@ -7,7 +10,16 @@ services:
     container_name: yomistream-backend
     environment:
       - PORT=8001
-      # Add other envs or mount a .env file
+    env_file:
+      - ./Backend/.env
+    expose:
+      - "8001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - webnet
 
@@ -15,13 +27,15 @@ services:
     image: nginx:stable-alpine
     container_name: yomistream-nginx
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
+    restart: unless-stopped
     networks:
       - webnet
 
