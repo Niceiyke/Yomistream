@@ -66,6 +66,62 @@ Notes: The `./scripts/start.sh` will call `nginx/generate-self-signed.sh` if cer
 
 Security
 - Self-signed certs are suitable for local testing only. For production, use trusted certificates (Let's Encrypt or your CA) and lock down CORS, env vars, and secrets.
+
+Troubleshooting: "permission denied" when running `./scripts/start.sh`
+- If you see "permission denied" when running `./scripts/start.sh`, set the executable bit and retry:
+
+```bash
+chmod +x ./scripts/start.sh
+./scripts/start.sh
+```
+
+- Alternatively you can invoke the script with `bash` (no chmod required):
+
+```bash
+bash ./scripts/start.sh
+```
+
+- On Windows-created repos you may have CRLF line endings that prevent execution on Linux. Convert with:
+
+```bash
+sudo apt-get install -y dos2unix    # if not installed
+dos2unix ./scripts/start.sh
+```
+
+Docker daemon / permission denied troubleshooting
+- If you see errors like "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock", try the following steps on Ubuntu:
+
+1) Check Docker daemon is running:
+
+```bash
+sudo systemctl status docker
+```
+
+2) If not running, start it:
+
+```bash
+sudo systemctl start docker
+```
+
+3) For a one-off run, prefix docker compose with sudo (quick workaround):
+
+```bash
+sudo docker compose up -d --build
+```
+
+4) For a permanent fix add your user to the `docker` group (then log out/in):
+
+```bash
+sudo usermod -aG docker $USER
+# then either log out and back in, or run:
+newgrp docker
+```
+
+After adding the user to the docker group you should be able to run `docker` and `docker compose` without sudo.
+
+Compose file warning
+- Recent Docker Compose V2 interprets top-level `version` as obsolete and will ignore it. The `docker-compose.yml` in this repo no longer contains `version:` to avoid that warning.
+
 YomiStream — Docker Compose + Nginx (reverse proxy with SSL)
 
 This file explains how to run the Backend behind an Nginx reverse proxy using Docker Compose and self-signed certificates for local testing.

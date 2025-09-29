@@ -13,6 +13,6 @@ else
 fi
 
 echo "Starting docker-compose (detached, builds images)..."
-docker compose up -d --build
+sudo docker-compose up -d --build
 
-echo "Done. Use 'docker compose ps' to see running containers and 'docker compose logs -f' to follow logs." 
+echo "Done. Use 'docker-compose ps' to see running containers and 'docker compose logs -f' to follow logs." 
