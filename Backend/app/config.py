@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     SUPABASE_JWKS_URL: str = os.getenv("SUPABASE_JWKS_URL", "")
     # Server config
     PORT: int = int(os.getenv("PORT", "8001"))
-    FRONTEND_ORIGIN: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    FRONTEND_ORIGINS: list[str] = os.getenv("FRONTEND_ORIGINS", "http://localhost:3000,http://localhost:3001").split(",")
     
     class Config:
         env_file = ".env"
