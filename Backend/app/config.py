@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     SUPABASE_JWT_SECRET: str = os.getenv("SUPABASE_JWT_SECRET", "")
     SUPABASE_JWKS_URL: str = os.getenv("SUPABASE_JWKS_URL", "")
     # Server config
-    PORT: int = int(os.getenv("PORT", "6000"))
+    PORT: int = int(os.getenv("PORT", "8001"))
     FRONTEND_ORIGIN: str = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
     
     class Config:

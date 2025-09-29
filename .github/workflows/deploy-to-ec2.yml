@@ -1,0 +1,162 @@
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows: ["Build and Publish Docker Image"]
+    types:
+      - completed
+    branches: ["production"]
+  workflow_dispatch:  # Allow manual triggering
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Clean and prepare EC2 environment
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Stop any running containers first to release file locks
+            cd ~/yomistream && docker-compose -f docker-compose.prod.yml down || true
+            
+            # Ensure clean directory structure - remove with sudo if needed
+            sudo rm -rf ~/yomistream/nginx || true
+            
+            # Create project directory and subdirectories with proper permissions
+            mkdir -p ~/yomistream
+            mkdir -p ~/yomistream/data ~/yomistream/logs ~/yomistream/results ~/yomistream/models
+            mkdir -p ~/yomistream/nginx/ssl
+            
+            # Ensure proper ownership of directories
+            sudo chown -R $(whoami):$(whoami) ~/yomistream
+
+      # Copy files individually to avoid tar issues
+      - name: Copy docker-compose file
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "~/yomistream"
+          overwrite: true
+          
+      - name: Copy config.ini
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "config.ini"
+          target: "~/yomistream"
+          overwrite: true
+          
+      - name: Copy nginx configuration
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "nginx/nginx.conf"
+          target: "~/yomistream/nginx/"
+          overwrite: true
+          
+      - name: Verify file structure and create default nginx config if needed
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # List directories to verify structure
+            ls -la ~/yomistream
+            ls -la ~/yomistream/nginx || echo "Nginx directory not found"
+      
+            # Check if nginx.conf exists and has content
+            if [ ! -s ~/yomistream/nginx/nginx.conf ]; then
+              echo "Creating default nginx.conf"
+              cat > ~/yomistream/nginx/nginx.conf << 'EOF'
+            server {
+                listen 80;
+                server_name _;
+            
+                location / {
+                    proxy_pass http://crypto-trading-bot:8000;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                }
+            
+                # Health check endpoint
+                location /health {
+                    return 200 'OK';
+                    add_header Content-Type text/plain;
+                }
+            }
+            EOF
+            
+                    echo "nginx.conf created with default configuration"
+                    cat ~/yomistream/nginx/nginx.conf
+                  fi
+        
+            
+          
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            # Login to Docker Hub
+            echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+            
+            # Navigate to app directory
+            cd ~/yomistream
+            
+            # Create .env file with secrets
+            cat > .env << EOF
+            BINANCE_API_KEY=${{ secrets.BINANCE_API_KEY }}
+            BINANCE_API_SECRET=${{ secrets.BINANCE_API_SECRET }}
+            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+            TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+            EOF
+            
+            # Secure the .env file
+            chmod 600 .env
+            
+            # Pull the latest image
+            docker-compose -f docker-compose.prod.yml pull
+            
+            # Stop and remove existing containers
+            docker-compose -f docker-compose.prod.yml down
+            
+            # Start new containers
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Verify deployment
+            docker-compose -f docker-compose.prod.yml ps
+            
+            # Check nginx logs for any errors
+            echo "Checking nginx logs:"
+            sleep 5
+            docker logs yomistream-nginx
+            
+            # Cleanup unused images
+            docker image prune -f
