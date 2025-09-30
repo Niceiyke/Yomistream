@@ -15,7 +15,7 @@ Quick start (Linux / macOS)
 docker compose up --build
 ```
 
-2. Visit: http://localhost (or your host IP) — nginx proxies API requests under `/api/`.
+2. Visit: https://localhost (or your host IP) — nginx will serve HTTPS (requires certs in `./nginx/certs`). API requests are under `/api/`.
 
 Quick start (Ubuntu EC2 / Linux) — one-liner
 
@@ -34,7 +34,30 @@ docker compose up --build
 ```
 
 Notes & Next steps
-- To use real certificates, replace files in `nginx/certs` with `fullchain.pem` and `privkey.pem` (or mount them as secrets in production).
+- TLS / certificates
+
+- To enable HTTPS between browsers and the nginx proxy, place your TLS certificate files in `./nginx/certs` on the host. The nginx container expects two files mounted at `/etc/nginx/certs`:
+
+- `fullchain.pem` — the full certificate chain (PEM)
+- `privkey.pem`   — the private key (PEM)
+
+- Example (on the host):
+
+```bash
+mkdir -p ./nginx/certs
+# copy fullchain.pem and privkey.pem into ./nginx/certs
+ls -l ./nginx/certs
+```
+
+- Cloudflare guidance
+
+- If you're using Cloudflare in front of your EC2 host, prefer one of these options:
+	- Option A (recommended): Use a Cloudflare Origin Certificate for the origin and set Cloudflare SSL/TLS to "Full (strict)". Place the origin cert and key as `fullchain.pem`/`privkey.pem` on the host.
+	- Option B: Use a trusted certificate on the origin (Let's Encrypt or CA) and keep Cloudflare in proxy mode.
+	- Option C (not recommended): Use Cloudflare "Flexible" mode (Cloudflare serves HTTPS to clients but connects to origin over HTTP). Flexible can cause redirect loops if the origin forces HTTPS.
+
+- Other notes
+
 - The Nginx config proxies to `backend:8001` inside the Docker network; the backend container must expose/use the same port (the provided `Backend/Dockerfile` currently starts uvicorn on 8001).
 - The nginx container currently returns 404 for non-API routes; if you have a frontend to serve, mount or proxy those routes accordingly.
 
