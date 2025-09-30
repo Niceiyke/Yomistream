@@ -5,25 +5,17 @@ This file explains how to run the Backend behind an Nginx reverse proxy using Do
 Files added
 - `docker-compose.yml` — defines `backend` (built from `Backend/`) and `nginx`.
 - `nginx/conf.d/yomistream.conf` — nginx site config. Proxies `/api/` and `/health` to the backend on port 8001.
-- `nginx/generate-self-signed.sh` — POSIX script to create `nginx/certs/fullchain.pem` and `privkey.pem`.
-- `nginx/generate-self-signed.ps1` — PowerShell script (Windows) to create a PFX and attempt extraction with openssl.
-- `scripts/start.sh` — convenience script for Ubuntu to generate certs (if missing) and run `docker compose up -d --build`.
+- `scripts/start.sh` — convenience script for Ubuntu to run `docker compose up -d --build`.
 
 Quick start (Linux / macOS)
 
-1. Generate self-signed certs:
-
-```bash
-./nginx/generate-self-signed.sh localhost
-```
-
-2. Build and start services:
+1. Build and start services:
 
 ```bash
 docker compose up --build
 ```
 
-3. Visit: https://localhost (your browser will warn about self-signed certs).
+2. Visit: http://localhost (or your host IP) — nginx proxies API requests under `/api/`.
 
 Quick start (Ubuntu EC2 / Linux) — one-liner
 
@@ -31,17 +23,11 @@ Quick start (Ubuntu EC2 / Linux) — one-liner
 ./scripts/start.sh
 ```
 
-This script will create certs in `nginx/certs` if they are missing and then run `docker compose up -d --build` so you can start the stack with one command.
+This script will run `docker compose up -d --build` so you can start the stack with one command.
 
 Quick start (Windows PowerShell)
 
-1. Run the PowerShell helper (requires openssl to extract PEMs):
-
-```powershell
-.\nginx\generate-self-signed.ps1
-```
-
-2. Build and start services:
+1. Build and start services:
 
 ```powershell
 docker compose up --build
@@ -62,7 +48,7 @@ cd /path/to/Yomistream
 ./scripts/start.sh
 ```
 
-Notes: The `./scripts/start.sh` will call `nginx/generate-self-signed.sh` if certs are missing and then run `docker compose up -d --build` so you only need that one command on Ubuntu.
+Notes: The `./scripts/start.sh` will run `docker compose up -d --build` so you only need that one command on Ubuntu.
 
 Security
 - Self-signed certs are suitable for local testing only. For production, use trusted certificates (Let's Encrypt or your CA) and lock down CORS, env vars, and secrets.
@@ -137,7 +123,7 @@ Quick start (Linux / macOS)
 1. Generate self-signed certs:
 
 ```bash
-./nginx/generate-self-signed.sh localhost
+# (no cert generation step included)
 ```
 
 2. Build and start services:
