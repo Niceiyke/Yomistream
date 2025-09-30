@@ -1,5 +1,24 @@
 // lib/api.ts
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+
+// Normalize API base so we don't accidentally concatenate malformed hosts.
+// - If the value is a full URL (starts with http/https), strip trailing slash.
+// - If it's empty or a single slash, treat as root ("") so calls become relative to current origin.
+function normalizeBase(base: string) {
+  if (!base || base === "/") return "";
+  const trimmed = base.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed.replace(/\/$/, "");
+  }
+  // If the value looks like a hostname without protocol (e.g. example.com), prefer using https://
+  if (/^[^/:]+(\:\d+)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  // Fallback: strip trailing slash
+  return trimmed.replace(/\/$/, "");
+}
+
+export const API_BASE_URL = normalizeBase(rawBase);
 
 // Simple in-memory cache for GET requests. Resets on page reload.
 const getCache = new Map<string, { data: any; expiresAt: number }>();
@@ -11,7 +30,8 @@ function makeCacheKey(path: string, init?: RequestInit) {
 }
 
 export async function apiGet(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  const res = await fetch(url, {
     ...init,
     method: "GET",
     headers: {
@@ -45,7 +65,8 @@ export function clearGetCache(prefix?: string) {
 }
 
 export async function apiPost(path: string, body: any, init?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  const res = await fetch(url, {
     ...init,
     method: "POST",
     headers: {
@@ -59,7 +80,8 @@ export async function apiPost(path: string, body: any, init?: RequestInit) {
 }
 
 export async function apiPut(path: string, body: any, init?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  const res = await fetch(url, {
     ...init,
     method: "PUT",
     headers: {
@@ -73,7 +95,8 @@ export async function apiPut(path: string, body: any, init?: RequestInit) {
 }
 
 export async function apiDelete(path: string, init?: RequestInit) {
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const url = API_BASE_URL ? `${API_BASE_URL}${path}` : path;
+  const res = await fetch(url, {
     ...init,
     method: "DELETE",
     headers: {
