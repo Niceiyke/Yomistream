@@ -7,13 +7,16 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str
     GROQ_API_KEY: str
     MODEL_NAME: str = "deepseek-r1-distill-llama-70b"
-    WHISPER_MODEL: str = "tiny"
+    WHISPER_MODEL: str = "base"
 
     # Supabase / Auth
     SUPABASE_URL: str
     SUPABASE_SERVICE_ROLE_KEY: str
     SUPABASE_JWT_SECRET: str
     SUPABASE_JWKS_URL: str
+
+    # YouTube
+    YOUTUBE_API_KEY: str
 
     # Server config
     PORT: int = 8001

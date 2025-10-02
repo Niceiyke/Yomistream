@@ -2,3 +2,10 @@ Backend/.env
 Backend/app/transcripts
 Backend/downloads
 Backend/venv
+Backend/clipper_jobs.db
+Backend/client_secret.json
+client_secret.json
+token.pickle
+Backend/token.pickle
+*.pyc
+__pycache__
