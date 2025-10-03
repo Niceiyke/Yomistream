@@ -2,9 +2,7 @@ FROM python:3.13-slim
 
 # Install system dependencies for audio/video processing and other tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
     ffmpeg \
-    git \
     curl \
     && rm -rf /var/lib/apt/lists/*
 

@@ -8,7 +8,12 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     GROQ_API_KEY: str | None = None
     MODEL_NAME: str = "deepseek-r1-distill-llama-70b"
-    WHISPER_MODEL: str = "tiny"
+
+    # Remote transcription service (external). Example: https://api.example.com/transcribe
+    # The application will POST multipart/form-data with the audio file under `file`.
+    TRANSCRIBE_API_URL: str | None = None
+    # Optional API key for the transcription provider. If provided, sent as Bearer token.
+    TRANSCRIBE_API_KEY: str | None = None
 
     # Supabase / Auth
     SUPABASE_URL: str | None = None
