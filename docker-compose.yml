@@ -11,10 +11,20 @@ services:
       - ./Backend/.env
     expose:
       - "8001"
+    # Mount the host Backend/ directory into the container for live code
+    # development. This is a bind mount so local edits are reflected inside
+    # the container. Adjust the host path if you run docker-compose from
+    # a different working directory.
+    volumes:
+      - ./Backend:/app:delegated
+    # Run as root during development so the container can create runtime
+    # directories (e.g., /app/temp, /app/downloads). Revert or remove this
+    # in production for better security.
+    user: root
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
-      interval: 10s
+      interval: 6000s
       timeout: 5s
       retries: 5
     networks:

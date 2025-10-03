@@ -7,5 +7,7 @@ Backend/client_secret.json
 client_secret.json
 token.pickle
 Backend/token.pickle
-*.pyc
-__pycache__
+Backend/*.pyc
+Backend/app/*.__pycache__
+__pycache__/
+**.pyc
