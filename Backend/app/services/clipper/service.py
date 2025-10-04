@@ -257,47 +257,65 @@ class ClipperService:
         return build('youtube', 'v3', credentials=credentials)
 
     async def download_video(self, url: HttpUrl, output: str, job_id: str):
-        """Download a video from a URL using yt-dlp."""
+        """Download a video from a URL using yt-dlp with cookie support."""
         self.update_job_status(job_id, "downloading", "Starting download...")
+        
+        # Check for cookies file (looking in parent directory for EC2 deployment)
+        cookies_file = Path(__file__).parent.parent.parent / "cookies.txt"
+        if not cookies_file.exists():
+            # Fallback to current directory
+            cookies_file = Path("cookies.txt")
+        
+        # Base command options
+        base_options = [
+            'yt-dlp',
+            '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+            '-o', output,
+            '--no-warnings',
+            '--no-check-certificate',
+        ]
+        
+        # Add cookies if file exists
+        if cookies_file.exists():
+            base_options.extend(['--cookies', str(cookies_file)])
+            logger.info(f"Using cookies from {cookies_file}")
         
         # Try multiple strategies for downloading
         strategies = [
-            # Strategy 1: Android client with headers
-            [
-                'yt-dlp',
-                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                '-o', output,
-                '--no-warnings',
-                '--no-check-certificate',
+            # Strategy 1: With cookies and Android client
+            base_options + [
                 '--extractor-args', 'youtube:player_client=android',
                 '--user-agent', 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
                 '--referer', 'https://www.youtube.com/',
                 '--add-header', 'Accept-Language:en-US,en;q=0.9',
                 str(url)
             ],
-            # Strategy 2: TV client (often less restricted)
-            [
-                'yt-dlp',
-                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                '-o', output,
-                '--no-warnings',
-                '--no-check-certificate',
+            # Strategy 2: With cookies and TV client
+            base_options + [
                 '--extractor-args', 'youtube:player_client=tv_embedded',
                 '--user-agent', 'Mozilla/5.0 (Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1',
                 str(url)
             ],
-            # Strategy 3: Basic approach with different user agent
+            # Strategy 3: With cookies and web client
+            base_options + [
+                '--extractor-args', 'youtube:player_client=web',
+                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                str(url)
+            ],
+            # Strategy 4: Cookies from browser (Chrome)
             [
                 'yt-dlp',
                 '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 '-o', output,
                 '--no-warnings',
-                '--no-check-certificate',
-                '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                '--cookies-from-browser', 'chrome',
                 str(url)
-            ]
+            ],
+            # Strategy 5: Basic with cookies only
+            base_options + [str(url)]
         ]
         
+        last_error = None
         for i, cmd in enumerate(strategies, 1):
             try:
                 self.update_job_status(job_id, "downloading", f"Trying download strategy {i}...")
@@ -314,24 +332,28 @@ class ClipperService:
                     self.update_job_status(job_id, "downloading", "Download completed")
                     return True
                 else:
-                    error_msg = f"Strategy {i} failed with return code {process.returncode}: {stderr.decode().strip()}"
-                    logger.warning(error_msg)
-                    if i == len(strategies):  # Last strategy failed
-                        self.update_job_status(job_id, "failed", "All download strategies failed", error=error_msg)
-                        return False
+                    error_msg = stderr.decode().strip()
+                    last_error = f"Strategy {i} failed with return code {process.returncode}: {error_msg}"
+                    logger.warning(last_error)
+                    
+                    # If it's a cookie/auth issue, provide helpful message
+                    if "sign in" in error_msg.lower() or "cookies" in error_msg.lower():
+                        logger.warning("Authentication required. Please provide cookies.txt or use --cookies-from-browser")
+                    
                     # Continue to next strategy
                     continue
                     
             except Exception as e:
-                error_msg = f"Strategy {i} failed with exception: {str(e)}"
-                logger.warning(error_msg)
-                if i == len(strategies):  # Last strategy failed
-                    self.update_job_status(job_id, "failed", "All download strategies failed", error=error_msg)
-                    return False
-                # Continue to next strategy
+                last_error = f"Strategy {i} failed with exception: {str(e)}"
+                logger.warning(last_error)
                 continue
         
-        # This should never be reached, but just in case
+        # All strategies failed
+        error_msg = f"All download strategies failed. Last error: {last_error}"
+        if not cookies_file.exists():
+            error_msg += "\n\nTip: Create a cookies.txt file to authenticate with YouTube. See https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp"
+        
+        self.update_job_status(job_id, "failed", "Download failed", error=error_msg)
         return False
 
     async def trim_video(self, input_file: str, output_file: str, start: str, 
