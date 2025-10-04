@@ -62,7 +62,7 @@ def clip_root():
     }
 
 
-@router.post("/", response_model=JobStatus)
+@router.post("", response_model=JobStatus)
 async def create_clip(request: ClipRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
     
