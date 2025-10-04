@@ -84,7 +84,7 @@ class ClipperService:
             return False
 
     def update_job_status(self, job_id: str, status: str, progress: str, 
-                         video_id: str = None, error: str = None) -> dict:
+                         video_id: str = None, video_url: str = None, error: str = None) -> dict:
         """Update the status of a job."""
         if job_id not in jobs:
             jobs[job_id] = {
@@ -93,6 +93,7 @@ class ClipperService:
                 "progress": progress,
                 "created_at": datetime.utcnow().isoformat(),
                 "video_id": video_id,
+                "video_url": video_url,
                 "error": error
             }
         else:
@@ -101,6 +102,8 @@ class ClipperService:
             job["progress"] = progress
             if video_id:
                 job["video_id"] = video_id
+            if video_url:
+                job["video_url"] = video_url
             if error:
                 job["error"] = error
             if status in ["completed", "failed"]:

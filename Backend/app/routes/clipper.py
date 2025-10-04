@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 from pydantic import HttpUrl
 from typing import Optional, List, Dict, Any
 import uuid
+import subprocess
 from datetime import datetime
 
 from app.services.clipper.service import ClipperService, ClipRequest, WebhookConfig, JobStatus, WebhookPayload
@@ -48,7 +49,7 @@ async def clipper_health_check():
             }
         )
 
-@router.get("", response_model=Dict[str, str])
+@router.get("", response_model=Dict[str, Any])
 async def clipper_root():
     """Root endpoint for the clipper API."""
     return {

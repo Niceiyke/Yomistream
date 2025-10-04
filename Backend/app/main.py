@@ -8,6 +8,14 @@ from app.config import settings
 from app.routes.clipper import router as clipper_router
 from app.services.clipper.service import ClipperService
 
+# Import all API routers
+from app.api.admin import router as admin_router
+from app.api.ai import router as ai_router
+from app.api.clip import router as clip_router
+from app.api.data import router as data_router
+from app.api.endpoints import router as endpoints_router
+from app.api.favorites import router as favorites_router
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,6 +37,12 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(clipper_router, prefix="/api/clip")
+app.include_router(admin_router, prefix="/api")
+app.include_router(ai_router, prefix="/api")
+app.include_router(clip_router, prefix="/api")
+app.include_router(data_router, prefix="/api")
+app.include_router(endpoints_router, prefix="/api")
+app.include_router(favorites_router, prefix="/api")
 
 # Startup event
 @app.on_event("startup")

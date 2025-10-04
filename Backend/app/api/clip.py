@@ -8,10 +8,11 @@ from typing import Optional, List
 import uuid
 from datetime import datetime
 
-from app.services import clipper as clipper_service
+from app.services.clipper.service import ClipperService
 from app.auth import get_current_user
 
 router = APIRouter()
+clipper_service = ClipperService()
 
 
 # Models kept in the router layer to shape requests/responses
@@ -64,36 +65,36 @@ def clip_root():
 @router.post("/", response_model=JobStatus)
 async def create_clip(request: ClipRequest, background_tasks: BackgroundTasks):
     job_id = str(uuid.uuid4())
-    clipper_service.create_job_record(job_id, created_at=datetime.now().isoformat())
-
-    # convert request to a plain dict suitable for the service
-    req_dict = request.dict()
-    # background processing using service
-    background_tasks.add_task(clipper_service.process_clip_job, job_id, req_dict)
-
-    job = clipper_service.get_job_record(job_id)
-    if not job:
-        raise HTTPException(status_code=500, detail="Failed to create job")
-    # coerce required fields to non-None defaults
-    job_id_val = job.get('job_id') or job_id
-    status_val = job.get('status') or 'pending'
-    progress_val = job.get('progress') or 'Job created'
-    created_at_val = job.get('created_at') or datetime.now().isoformat()
-    return JobStatus(**{
-        'job_id': str(job_id_val),
-        'status': str(status_val),
-        'progress': str(progress_val),
-        'video_id': job.get('video_id'),
-        'video_url': job.get('video_url'),
-        'error': job.get('error'),
-        'created_at': str(created_at_val),
-        'completed_at': job.get('completed_at')
-    })
+    
+    # Convert ClipRequest to the service's expected format
+    from app.services.clipper.service import ClipRequest as ServiceClipRequest
+    service_request = ServiceClipRequest(
+        video_url=request.video_url,
+        start_time=request.start_time,
+        end_time=request.end_time,
+        title=request.title,
+        description=request.description,
+        tags=request.tags,
+        category_id=request.category_id,
+        privacy_status=request.privacy_status,
+        webhook=request.webhook
+    )
+    
+    # Start background processing
+    background_tasks.add_task(clipper_service.process_clip_job, job_id, service_request)
+    
+    # Return initial job status
+    return JobStatus(
+        job_id=job_id,
+        status="pending",
+        progress="Job created",
+        created_at=datetime.now().isoformat()
+    )
 
 
 @router.get("/job/{job_id}", response_model=JobStatus)
 def get_job_status(job_id: str, current_user: dict = Depends(get_current_user)):
-    job = clipper_service.get_job_record(job_id)
+    job = clipper_service.get_job_status(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     return JobStatus(**job)
@@ -106,18 +107,30 @@ def list_jobs(current_user: dict = Depends(get_current_user)):
 
 @router.delete("/job/{job_id}")
 def delete_job(job_id: str, current_user: dict = Depends(get_current_user)):
-    job = clipper_service.get_job_record(job_id)
-    if not job:
+    success = clipper_service.delete_job(job_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Job not found")
-    clipper_service.delete_job_record(job_id)
     return {"message": "Job deleted successfully"}
 
 
 @router.post("/webhook/test")
 async def test_webhook(webhook: WebhookConfig):
-    payload = {"event": "completed", "job_id": "test-job-123", "status": "completed", "video_id": "test-video-xyz", "video_url": "https://youtube.com/watch?v=test-video-xyz", "error": None, "timestamp": datetime.now().isoformat()}
-    await clipper_service.send_webhook(str(webhook.url), payload, webhook.headers or {})
-    return {"success": True, "message": "Test webhook sent successfully", "payload": payload}
+    from app.services.clipper.service import WebhookConfig as ServiceWebhookConfig, WebhookPayload
+    service_webhook = ServiceWebhookConfig(
+        url=webhook.url,
+        events=webhook.events,
+        headers=webhook.headers
+    )
+    payload = WebhookPayload(
+        event="test",
+        job_id="test-job-123",
+        status="test",
+        video_id="test-video-xyz",
+        video_url="https://youtube.com/watch?v=test-video-xyz",
+        timestamp=datetime.now().isoformat()
+    )
+    success = await clipper_service.send_webhook(service_webhook, payload)
+    return {"success": success, "message": "Test webhook sent successfully", "payload": payload.dict()}
 
 
 @router.get("/health")
