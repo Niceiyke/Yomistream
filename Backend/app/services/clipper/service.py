@@ -196,30 +196,32 @@ class ClipperService:
     def update_job_status(self, job_id: str, status: str, progress: str, 
                          video_id: str = None, video_url: str = None, error: str = None) -> dict:
         """Update the status of a job."""
-        if job_id not in jobs:
-            jobs[job_id] = {
-                "job_id": job_id,
-                "status": status,
-                "progress": progress,
-                "created_at": datetime.utcnow().isoformat(),
-                "video_id": video_id,
-                "video_url": video_url,
-                "error": error
-            }
-        else:
-            job = jobs[job_id]
-            job["status"] = status
-            job["progress"] = progress
-            if video_id:
-                job["video_id"] = video_id
-            if video_url:
-                job["video_url"] = video_url
-            if error:
-                job["error"] = error
-            if status in ["completed", "failed"]:
-                job["completed_at"] = datetime.utcnow().isoformat()
+        # First, try to get the existing job
+        job = self._get_job_record(job_id)
         
-        return jobs[job_id]
+        if job is None:
+            # Create a new job record if it doesn't exist
+            self._create_job_record(job_id)
+            created_at = datetime.utcnow().isoformat()
+        else:
+            created_at = job.get("created_at")
+        
+        # Update the job record in the database
+        self._update_job_record(
+            job_id=job_id,
+            status=status,
+            progress=progress,
+            video_id=video_id,
+            video_url=video_url,
+            error=error
+        )
+        
+        # Return the updated job
+        updated_job = self._get_job_record(job_id)
+        if updated_job is None:
+            raise ValueError(f"Failed to update job {job_id}")
+            
+        return updated_job
 
     def cleanup_files(self, *files):
         """Clean up temporary files."""
