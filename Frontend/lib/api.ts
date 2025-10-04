@@ -1,5 +1,5 @@
 // lib/api.ts
-const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 // Normalize API base so we don't accidentally concatenate malformed hosts.
 // - If the value is a full URL (starts with http/https), strip trailing slash.
