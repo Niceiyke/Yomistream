@@ -5,9 +5,6 @@ import logging
 from pathlib import Path
 
 from app.config import settings
-from app.routes.clipper import router as clipper_router
-from app.services.clipper.service import ClipperService
-
 # Import all API routers
 from app.api.admin import router as admin_router
 from app.api.ai import router as ai_router
@@ -36,10 +33,9 @@ app.add_middleware(
 )
 
 # Include API routes
-app.include_router(clipper_router, prefix="/api/clip")
 app.include_router(admin_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
-app.include_router(clip_router, prefix="/api")
+app.include_router(clip_router, prefix="/api")  # Commented out to avoid conflicts
 app.include_router(data_router, prefix="/api")
 app.include_router(endpoints_router, prefix="/api")
 app.include_router(favorites_router, prefix="/api")

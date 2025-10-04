@@ -8,7 +8,7 @@ from datetime import datetime
 
 from app.services.clipper.service import ClipperService, ClipRequest, WebhookConfig, JobStatus, WebhookPayload
 
-router = APIRouter()
+router = APIRouter(prefix="/clip", tags=["clip"])
 clipper_service = ClipperService()
 
 @router.get("/health", response_model=Dict[str, str])

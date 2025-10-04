@@ -148,40 +148,79 @@ class ClipperService:
         """Download a video from a URL using yt-dlp."""
         self.update_job_status(job_id, "downloading", "Starting download...")
         
-        try:
-            cmd = [
+        # Try multiple strategies for downloading
+        strategies = [
+            # Strategy 1: Android client with headers
+            [
                 'yt-dlp',
                 '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
                 '-o', output,
                 '--no-warnings',
                 '--no-check-certificate',
                 '--extractor-args', 'youtube:player_client=android',
-                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                '--user-agent', 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.120 Mobile Safari/537.36',
+                '--referer', 'https://www.youtube.com/',
+                '--add-header', 'Accept-Language:en-US,en;q=0.9',
+                str(url)
+            ],
+            # Strategy 2: TV client (often less restricted)
+            [
+                'yt-dlp',
+                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                '-o', output,
+                '--no-warnings',
+                '--no-check-certificate',
+                '--extractor-args', 'youtube:player_client=tv_embedded',
+                '--user-agent', 'Mozilla/5.0 (Linux; Tizen 2.4.0) AppleWebKit/538.1 (KHTML, like Gecko) Version/2.4.0 TV Safari/538.1',
+                str(url)
+            ],
+            # Strategy 3: Basic approach with different user agent
+            [
+                'yt-dlp',
+                '-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+                '-o', output,
+                '--no-warnings',
+                '--no-check-certificate',
+                '--user-agent', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 str(url)
             ]
-            
-            process = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            
-            stdout, stderr = await process.communicate()
-            
-            if process.returncode != 0:
-                error_msg = f"Download failed with return code {process.returncode}: {stderr.decode().strip()}"
-                logger.error(error_msg)
-                self.update_job_status(job_id, "failed", "Download failed", error=error_msg)
-                return False
+        ]
+        
+        for i, cmd in enumerate(strategies, 1):
+            try:
+                self.update_job_status(job_id, "downloading", f"Trying download strategy {i}...")
                 
-            self.update_job_status(job_id, "downloading", "Download completed")
-            return True
-            
-        except Exception as e:
-            error_msg = f"Error during download: {str(e)}"
-            logger.error(error_msg)
-            self.update_job_status(job_id, "failed", "Download error", error=error_msg)
-            return False
+                process = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE
+                )
+                
+                stdout, stderr = await process.communicate()
+                
+                if process.returncode == 0:
+                    self.update_job_status(job_id, "downloading", "Download completed")
+                    return True
+                else:
+                    error_msg = f"Strategy {i} failed with return code {process.returncode}: {stderr.decode().strip()}"
+                    logger.warning(error_msg)
+                    if i == len(strategies):  # Last strategy failed
+                        self.update_job_status(job_id, "failed", "All download strategies failed", error=error_msg)
+                        return False
+                    # Continue to next strategy
+                    continue
+                    
+            except Exception as e:
+                error_msg = f"Strategy {i} failed with exception: {str(e)}"
+                logger.warning(error_msg)
+                if i == len(strategies):  # Last strategy failed
+                    self.update_job_status(job_id, "failed", "All download strategies failed", error=error_msg)
+                    return False
+                # Continue to next strategy
+                continue
+        
+        # This should never be reached, but just in case
+        return False
 
     async def trim_video(self, input_file: str, output_file: str, start: str, 
                         end: str, job_id: str) -> bool:

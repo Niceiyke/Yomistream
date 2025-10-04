@@ -11,7 +11,7 @@ from datetime import datetime
 from app.services.clipper.service import ClipperService
 from app.auth import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/clip", tags=["clip"])
 clipper_service = ClipperService()
 
 
@@ -101,7 +101,7 @@ def get_job_status(job_id: str, current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/jobs")
-def list_jobs(current_user: dict = Depends(get_current_user)):
+def list_jobs():
     return {"jobs": clipper_service.list_jobs()}
 
 

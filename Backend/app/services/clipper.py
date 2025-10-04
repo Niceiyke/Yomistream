@@ -1,3 +1,4 @@
+print("=== Clipper module is being imported ===")
 import os
 import subprocess
 import uuid
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'clipper_jobs.db')
 DB_PATH = os.path.abspath(DB_PATH)
+print("DB_PATH",DB_PATH)
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 TEMP_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'temp')
 os.makedirs(TEMP_DIR, exist_ok=True)
@@ -93,6 +95,7 @@ def get_job_record(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 def list_jobs(limit: int = 100) -> List[Dict[str, Any]]:
+    print("DB_PATH",DB_PATH)
     conn = get_db_conn()
     cur = conn.execute("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,))
     rows = cur.fetchall()
@@ -145,8 +148,54 @@ async def send_webhook(url: str, payload: dict, headers: Optional[dict] = None):
         logger.warning("Webhook failed: %s", e)
 
 
-def download_video(url: str, output: str) -> bool:
-    return run_subprocess(["yt-dlp", "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "-o", output, url])
+def download_video(url: str, output: str, max_retries: int = 3) -> bool:
+    """Download a video using yt-dlp with browser cookies for authentication.
+    
+    Args:
+        url: The video URL to download
+        output: Output file path template
+        max_retries: Maximum number of retry attempts
+        
+    Returns:
+        bool: True if download was successful, False otherwise
+    """
+    # Try with cookies from common browsers first
+    browsers = ["chrome", "firefox", "edge", "safari"]
+    
+    for attempt in range(max_retries):
+        for browser in browsers:
+            try:
+                cmd = [
+                    "yt-dlp",
+                    "--cookies-from-browser", browser,
+                    "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                    "-o", output,
+                    "--no-warnings",
+                    "--retries", "10",
+                    "--fragment-retries", "10",
+                    "--extractor-retries", "10",
+                    "--socket-timeout", "30",
+                    "--source-address", "0.0.0.0",
+                    url
+                ]
+                
+                if run_subprocess(cmd):
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"Download attempt {attempt + 1} with {browser} failed: {str(e)}")
+                continue
+    
+    # If all browser attempts fail, try without cookies as fallback
+    logger.warning("All browser cookie attempts failed, trying without cookies")
+    return run_subprocess([
+        "yt-dlp",
+        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "-o", output,
+        "--no-warnings",
+        "--retries", "5",
+        url
+    ])
 
 
 def trim_video(input_file: str, output_file: str, start: str, end: str) -> bool:
