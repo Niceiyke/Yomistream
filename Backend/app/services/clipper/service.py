@@ -2,10 +2,12 @@ import os
 import uuid
 import logging
 import asyncio
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, HttpUrl
+import sqlite3
 import subprocess
 import httpx
+from typing import List, Optional, Dict, Any, Tuple
+from pydantic import BaseModel, HttpUrl, validator
+from pathlib import Path
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -13,12 +15,15 @@ from google.auth.transport.requests import Request
 from googleapiclient.errors import HttpError
 import pickle
 from datetime import datetime
-from pathlib import Path
+from PIL import Image, ImageOps
+import io
 
 logger = logging.getLogger(__name__)
 
-# In-memory storage for job status (consider using a database in production)
-jobs: Dict[str, Dict[str, Any]] = {}
+# Constants
+THUMBNAIL_MAX_SIZE = 2 * 1024 * 1024  # 2MB
+THUMBNAIL_DIM = (1280, 720)
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
 class WebhookConfig(BaseModel):
     url: HttpUrl
@@ -56,13 +61,118 @@ class WebhookPayload(BaseModel):
     timestamp: str
 
 class ClipperService:
-    def __init__(self, temp_dir: str = "temp", uploads_dir: str = "uploads"):
+    def __init__(self, temp_dir: str = "temp", uploads_dir: str = "uploads", db_path: str = None):
+        # Initialize directories
         self.temp_dir = Path(temp_dir)
         self.uploads_dir = Path(uploads_dir)
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.uploads_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Database setup - use a data directory in the backend root
+        self.db_path = db_path or str(Path(__file__).parent.parent.parent / 'data' / 'clipper_jobs.db')
+        
+        # Ensure the data directory exists
+        db_dir = Path(self.db_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+        
+        logger.info(f"Using database at: {self.db_path}")
+        self._init_db()
+        
+        # OAuth2 credentials
         self.credentials_file = "credentials.json"
         self.token_file = "token.pickle"
+    
+    def _get_db_conn(self):
+        """Get a database connection."""
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        return conn
+    
+    def _init_db(self):
+        """Initialize the database with required tables."""
+        with self._get_db_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS jobs (
+                    job_id TEXT PRIMARY KEY,
+                    status TEXT,
+                    progress TEXT,
+                    video_id TEXT,
+                    video_url TEXT,
+                    error TEXT,
+                    created_at TEXT,
+                    completed_at TEXT
+                )
+            """)
+            conn.commit()
+    
+    def _create_job_record(self, job_id: str) -> None:
+        """Create a new job record in the database."""
+        with self._get_db_conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO jobs (job_id, status, progress, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (job_id, "pending", "0%", datetime.utcnow().isoformat())
+            )
+            conn.commit()
+    
+    def _update_job_record(
+        self,
+        job_id: str,
+        status: str = None,
+        progress: str = None,
+        video_id: str = None,
+        video_url: str = None,
+        error: str = None
+    ) -> None:
+        """Update a job record in the database."""
+        updates = []
+        params = {}
+        
+        if status is not None:
+            updates.append("status = :status")
+            params["status"] = status
+        if progress is not None:
+            updates.append("progress = :progress")
+            params["progress"] = progress
+        if video_id is not None:
+            updates.append("video_id = :video_id")
+            params["video_id"] = video_id
+        if video_url is not None:
+            updates.append("video_url = :video_url")
+            params["video_url"] = video_url
+        if error is not None:
+            updates.append("error = :error")
+            params["error"] = error
+        if status in ["completed", "failed"]:
+            updates.append("completed_at = :completed_at")
+            params["completed_at"] = datetime.utcnow().isoformat()
+        
+        if not updates:
+            return
+            
+        query = f"""
+            UPDATE jobs 
+            SET {', '.join(updates)}
+            WHERE job_id = :job_id
+        """
+        params["job_id"] = job_id
+        
+        with self._get_db_conn() as conn:
+            conn.execute(query, params)
+            conn.commit()
+    
+    def _get_job_record(self, job_id: str) -> Optional[Dict[str, Any]]:
+        """Get a job record from the database."""
+        with self._get_db_conn() as conn:
+            cursor = conn.execute(
+                "SELECT * FROM jobs WHERE job_id = ?",
+                (job_id,)
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
     async def send_webhook(self, webhook_config: WebhookConfig, payload: WebhookPayload):
         """Send a webhook notification with the given payload."""
@@ -397,15 +507,41 @@ class ClipperService:
 
     def get_job_status(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get the status of a job."""
-        return jobs.get(job_id)
+        with self._get_db_conn() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM jobs 
+                WHERE job_id = ?
+                """,
+                (job_id,)
+            )
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+            return None
     
     def list_jobs(self) -> List[Dict[str, Any]]:
-        """List all jobs."""
-        return list(jobs.values())
+        """List all jobs from the database."""
+        with self._get_db_conn() as conn:
+            cursor = conn.execute(
+                """
+                SELECT * FROM jobs 
+                ORDER BY datetime(created_at) DESC
+                """
+            )
+            return [dict(row) for row in cursor.fetchall()]
     
     def delete_job(self, job_id: str) -> bool:
         """Delete a job."""
-        if job_id in jobs:
-            del jobs[job_id]
-            return True
+        with self._get_db_conn() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM jobs 
+                WHERE job_id = ?
+                """,
+                (job_id,)
+            )
+            if cursor.rowcount > 0:
+                return True
+            return False
         return False
